@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.cache/
+venv
+
+# Secrets
+.env
+
+# Project-specific exclusions (kept from original agent/.gitignore)
+models/cross-reference/*
+任务分工.md
+*SKILL.md
+项目申请表.md
+
+# IDE
+.idea
+.vscode

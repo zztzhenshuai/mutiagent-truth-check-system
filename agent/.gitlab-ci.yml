@@ -1,0 +1,53 @@
+stages:
+  - build
+  - test
+
+build_ci_image:
+  stage: build
+  script:
+    - REQ_HASH="$(sha256sum requirements.txt | awk '{print $1}')"
+    - export CI_IMAGE_TAG="$CI_PROJECT_PATH_SLUG-ci-base:deps-${REQ_HASH}"
+    - CACHE_FROM_ARGS=""
+    - if docker image inspect "$CI_IMAGE_TAG" >/dev/null 2>&1; then CACHE_FROM_ARGS="--cache-from $CI_IMAGE_TAG"; fi
+    - docker build $CACHE_FROM_ARGS -t "$CI_IMAGE_TAG" -f Dockerfile .
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+test_core:
+  stage: test
+  needs:
+    - build_ci_image
+  script:
+    - REQ_HASH="$(sha256sum requirements.txt | awk '{print $1}')"
+    - export CI_IMAGE_TAG="$CI_PROJECT_PATH_SLUG-ci-base:deps-${REQ_HASH}"
+    - docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e USER=ci -e LOGNAME=ci -e TORCHINDUCTOR_CACHE_DIR=/tmp/torch_cache -v "$CI_PROJECT_DIR:/workspace" -w /workspace "$CI_IMAGE_TAG" python -m pytest -p no:cacheprovider tests/test_preprocess.py tests/test_planner.py tests/test_scanner.py -v --junitxml=report-core.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report-core.xml
+    paths:
+      - report-core.xml
+    expire_in: 1 week
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+test_agent:
+  stage: test
+  needs:
+    - build_ci_image
+  script:
+    - REQ_HASH="$(sha256sum requirements.txt | awk '{print $1}')"
+    - export CI_IMAGE_TAG="$CI_PROJECT_PATH_SLUG-ci-base:deps-${REQ_HASH}"
+    - docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e USER=ci -e LOGNAME=ci -e TORCHINDUCTOR_CACHE_DIR=/tmp/torch_cache -v "$CI_PROJECT_DIR:/workspace" -w /workspace "$CI_IMAGE_TAG" python -m pytest -p no:cacheprovider tests/test_agent.py tests/test_cross_reference.py -v --junitxml=report-agent.xml
+  artifacts:
+    when: always
+    reports:
+      junit: report-agent.xml
+    paths:
+      - report-agent.xml
+    expire_in: 1 week
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'

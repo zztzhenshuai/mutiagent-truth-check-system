@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #e0e5ec;
+      --text-main: #4b5563;
+      --text-muted: #9ca3af;
+      --text-heading: #374151;
+      --accent-indigo: #4f46e5;
+      --accent-green: #10b981;
+      
+      --neu-out: 6px 6px 12px #b8bcc2, -6px -6px 12px #ffffff;
+      --neu-out-sm: 4px 4px 8px #b8bcc2, -4px -4px 8px #ffffff;
+      --neu-in: inset 4px 4px 8px #b8bcc2, inset -4px -4px 8px #ffffff;
+      --neu-active: inset 2px 2px 5px #b8bcc2, inset -2px -2px 5px #ffffff;
+    }
+
+    body {
+      width: 360px; /* 稍微加宽以容纳面板 */
+      margin: 0; padding: 20px;
+      background-color: var(--bg-color);
+      font-family: 'Inter', sans-serif;
+      color: var(--text-main);
+      display: flex; flex-direction: column; gap: 20px;
+      box-sizing: border-box;
+    }
+
+    /* 顶部标题区 */
+    .header { display: flex; align-items: center; gap: 12px; }
+    .logo-slot { width: 40px; height: 40px; border-radius: 12px; box-shadow: var(--neu-in); display: flex; align-items: center; justify-content: center; }
+    .sys-title { font-weight: 700; font-size: 16px; color: var(--text-heading); letter-spacing: -0.5px; display: block;}
+    .sys-subtitle { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; }
+
+    /* 模块标题 */
+    .section-title { font-size: 12px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+
+    /* --- Skill 区 --- */
+    .overlay-list { display: flex; flex-direction: column; gap: 12px; max-height: 150px; overflow-y: auto; padding-right: 5px; }
+    .overlay-list::-webkit-scrollbar { width: 6px; }
+    .overlay-list::-webkit-scrollbar-thumb { background: #b8bcc2; border-radius: 10px; }
+    
+    .overlay-item {
+      padding: 12px 16px; border-radius: 12px; box-shadow: var(--neu-out-sm);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .overlay-info { display: flex; flex-direction: column; gap: 4px; width: 75%; }
+    .overlay-name { font-size: 13px; font-weight: 600; color: var(--text-heading); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .overlay-desc { font-size: 10px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    
+    /* 拟物开关 (Toggle) */
+    .neu-toggle { width: 36px; height: 18px; border-radius: 10px; background: var(--bg-color); box-shadow: var(--neu-in); position: relative; cursor: pointer; transition: 0.3s; }
+    .neu-toggle::after { content: ''; position: absolute; left: 3px; top: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--text-muted); box-shadow: var(--neu-out-sm); transition: 0.3s; }
+    .neu-toggle.active { background: var(--bg-color); }
+    .neu-toggle.active::after { left: 21px; background: var(--accent-green); box-shadow: 0 0 6px var(--accent-green); }
+
+    /* --- 工具开关 (Tools) --- */
+    .tool-item {
+      padding: 10px 14px; border-radius: 12px; box-shadow: var(--neu-out-sm);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .tool-info { display: flex; flex-direction: column; gap: 3px; width: 70%; }
+    .tool-name { font-size: 12px; font-weight: 600; color: var(--text-heading); }
+    .tool-desc { font-size: 10px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tool-usedby { font-size: 9px; color: var(--accent-indigo); opacity: 0.7; }
+    .tool-item.danger { border-left: 3px solid var(--accent-red); }
+    .tool-item.danger .tool-name { color: var(--accent-red); }
+    .tool-danger-badge {
+      font-size: 9px; background: var(--accent-red); color: #fff;
+      padding: 2px 6px; border-radius: 6px; margin-left: 6px;
+    }
+
+    /* --- 3. 抽屉与表单 --- */
+    .add-btn { background: none; border: none; color: var(--accent-indigo); font-size: 11px; font-weight: 700; cursor: pointer; text-transform: uppercase; }
+    .drawer { 
+      background: var(--bg-color); border-radius: 16px; box-shadow: var(--neu-in); 
+      padding: 16px; display: none; flex-direction: column; gap: 12px; 
+      opacity: 0; transform: translateY(-10px); transition: all 0.3s ease;
+    }
+    .drawer.open { display: flex; opacity: 1; transform: translateY(0); }
+    .neu-input {
+      width: 100%; padding: 10px 12px; border-radius: 8px; background: var(--bg-color); border: none; outline: none;
+      box-shadow: var(--neu-in); color: var(--text-heading); font-family: inherit; font-size: 12px; box-sizing: border-box;
+    }
+    .neu-input::placeholder { color: var(--text-muted); }
+    textarea.neu-input { resize: none; height: 60px; }
+    .save-btn {
+      padding: 8px; border-radius: 8px; border: none; background: var(--bg-color); color: var(--accent-indigo); font-weight: 600;
+      box-shadow: var(--neu-out-sm); cursor: pointer; transition: 0.2s;
+    }
+    .save-btn:active { box-shadow: var(--neu-in); }
+
+    /* --- 底部启动按钮 --- */
+    .main-btn {
+      width: 100%; padding: 16px; border-radius: 16px; border: none; background: var(--bg-color); color: var(--accent-indigo);
+      font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 700;
+      box-shadow: var(--neu-out); cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s ease; outline: none; margin-top: 10px;
+    }
+    .main-btn:active { box-shadow: var(--neu-active); transform: translateY(2px); }
+    /* 历史记录专属样式 */
+    .history-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; transition: 0.2s; }
+    .history-btn:hover { color: var(--accent-indigo); }
+    
+    #main-view { transition: all 0.3s ease; }
+    #history-view { display: none; flex-direction: column; gap: 12px; opacity: 0; transition: all 0.3s ease; }
+    #history-view.active { display: flex; opacity: 1; }
+    #main-view.hidden { display: none; }
+
+    .history-item { padding: 16px; border-radius: 16px; box-shadow: var(--neu-out-sm); cursor: pointer; transition: 0.2s; border: 1px solid transparent; }
+    .history-item:hover { box-shadow: var(--neu-in); border-color: rgba(79,70,229,0.2); }
+    .history-title { font-weight: 600; font-size: 13px; color: var(--text-heading); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .history-meta { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-muted); }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div class="logo-slot">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 12 12 17 22 12"></polyline><polyline points="2 17 12 22 22 17"></polyline></svg>
+      </div>
+      <div class="title-area">
+        <span class="sys-title">FactChecker Agent</span>
+      </div>
+    </div>
+    <!-- 👇 新增的历史按钮 -->
+    <button class="history-btn" id="toggle-history-btn">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg> 历史
+    </button>
+  </div>
+
+  <!-- 👇 用 #main-view 包裹原有的领域和 Skill 代码 -->
+  <div id="main-view">
+      <!-- Skill (叠加) -->
+      <div>
+        <div class="section-title">Skill <button class="add-btn" id="toggle-drawer-btn">+ 新增 skill</button></div>
+        <div class="overlay-list" id="overlay-list"></div>
+        <div class="drawer" id="add-drawer">
+          <input type="text" id="overlay-name" class="neu-input" placeholder="标识名 (如 anti_clickbait)" maxlength="40">
+          <input type="text" id="overlay-desc" class="neu-input" placeholder="简短描述 (选填)">
+          <textarea id="overlay-prompt" class="neu-input" placeholder="输入你想额外叮嘱大模型的提示词..." maxlength="4000"></textarea>
+          <button class="save-btn" id="save-overlay-btn">保存并启用</button>
+        </div>
+      </div>
+
+      <!-- 工具开关 (Disabled Tools) -->
+      <div style="margin-top: 20px;">
+        <div class="section-title">
+          工具开关 (Tools) 
+          <span id="tools-status" style="font-size:10px; color:var(--text-muted); font-weight:400;"></span>
+        </div>
+        <div class="overlay-list" id="tools-list" style="max-height: 180px;">
+          <div style="text-align:center; font-size:12px; color:var(--text-muted); padding:10px;">加载工具列表中...</div>
+        </div>
+      </div>
+
+      <button id="start-btn" class="main-btn" style="margin-top:20px;">分析文章</button>
+  </div>
+
+  <!-- 👇 新增：历史记录视图 -->
+  <div id="history-view">
+      <div class="section-title">过往会话记录</div>
+      <div id="history-list" style="display:flex; flex-direction:column; gap:12px; max-height:300px; overflow-y:auto; padding-right:5px;">
+         <!-- 列表在这里动态渲染 -->
+      </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

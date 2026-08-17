@@ -1,0 +1,13 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.cache/
+models/cross-reference/*
+任务分工.md
+.idea
+.vscode
+*.pdf
+*SKILL.md
+项目申请表.md
+venv

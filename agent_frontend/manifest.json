@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "FactChecker Agent",
+  "version": "1.0",
+  "description": "网页文章错误检测插件",
+  "permissions": ["activeTab", "scripting", "sidePanel", "storage"],
+  "host_permissions": ["<all_urls>", "http://localhost:*/*"],
+  "background": {
+    "service_worker": "background/service_worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["lib/Readability.js", "content/ui.js", "content/highlighter.js", "content/content_script.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html"
+  },
+  "side_panel": {
+    "default_path": "sidepanel/panel.html"
+  }
+}

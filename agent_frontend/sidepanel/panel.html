@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #e0e5ec;
+      --text-main: #4b5563;
+      --text-muted: #9ca3af;
+      --text-heading: #374151;
+      --accent-indigo: #4f46e5;
+      --accent-green: #10b981;
+      --accent-red: #ef4444;
+      --accent-orange: #f59e0b;
+      --accent-purple: #8b5cf6;
+
+      --neu-out: 6px 6px 12px #b8bcc2, -6px -6px 12px #ffffff;
+      --neu-out-sm: 4px 4px 8px #b8bcc2, -4px -4px 8px #ffffff;
+      --neu-in: inset 4px 4px 8px #b8bcc2, inset -4px -4px 8px #ffffff;
+      --neu-active: inset 2px 2px 5px #b8bcc2, inset -2px -2px 5px #ffffff;
+      --swimlane-width: 200px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      margin: 0; 
+      padding: 16px 16px 80px 16px; 
+      overflow-x: hidden;
+      min-height: 100vh;
+    }
+
+    /* ===== 顶部控制面板 ===== */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px; padding: 14px 18px;
+      border-radius: 20px; box-shadow: var(--neu-out);
+      flex-shrink: 0;
+    }
+    .header-title { font-weight: 700; font-size: 15px; color: var(--text-heading); }
+    .status-container { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+    .status-dot { width: 10px; height: 10px; border-radius: 50%; background-color: var(--text-muted); transition: all 0.3s; }
+
+    /* ===== 全局日志区（scan / route / context / heartbeat） ===== */
+    #global-log {
+      margin-bottom: 16px;
+      display: flex; flex-direction: column; gap: 6px;
+      flex-shrink: 0;
+    }
+    .glog-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 12px; border-radius: 10px;
+      font-size: 11px; color: var(--text-muted);
+      box-shadow: var(--neu-out-sm);
+      animation: softRise 0.3s ease forwards;
+    }
+    .glog-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .glog-dot.scan { background: var(--accent-indigo); }
+    .glog-dot.route { background: var(--accent-green); }
+    .glog-dot.context { background: var(--accent-purple); }
+    .glog-dot.heartbeat { background: var(--text-muted); }
+    .glog-dot.error { background: var(--accent-red); }
+    .glog-dot.plan { background: var(--accent-indigo); }
+
+    /* ===== 泳道容器 ===== */
+    #swimlanes-outer {
+      flex: 1 1 auto;
+    }
+    #swimlanes-wrap {
+      display: flex; gap: 12px;
+      overflow-x: auto;
+      padding-bottom: 12px;
+      scroll-behavior: smooth;
+      scrollbar-width: thin;
+      scrollbar-color: #b8bcc2 transparent;
+    }
+    #swimlanes-wrap::-webkit-scrollbar { height: 6px; }
+    #swimlanes-wrap::-webkit-scrollbar-thumb { background: #b8bcc2; border-radius: 10px; }
+
+    /* ===== 单条泳道 ===== */
+    .swimlane {
+      flex: 0 0 var(--swimlane-width);
+      width: var(--swimlane-width);
+      display: flex; flex-direction: column;
+      border-radius: 16px;
+      background: var(--bg-color);
+      box-shadow: var(--neu-out);
+      overflow: hidden;
+      animation: softRise 0.4s ease forwards;
+      transition: box-shadow 0.3s, border-color 0.3s;
+      border: 2px solid transparent;
+      max-height: 460px;
+    }
+    .swimlane.pending  { border-color: transparent; }
+    .swimlane.running  { border-color: var(--accent-indigo); box-shadow: var(--neu-out), 0 0 12px rgba(79,70,229,0.15); }
+    .swimlane.pass     { border-color: var(--accent-green); }
+    .swimlane.fail     { border-color: var(--accent-red); }
+    .swimlane.error    { border-color: var(--accent-orange); }
+
+    /* 泳道头部 */
+    .sw-head {
+      padding: 10px 12px 8px 12px;
+      flex-shrink: 0;
+    }
+    .sw-head-top {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 4px;
+    }
+    .sw-claim-id {
+      font-size: 10px; font-weight: 700; color: var(--text-muted);
+      letter-spacing: 0.5px;
+    }
+    .sw-score {
+      font-size: 10px; font-weight: 600; color: var(--accent-indigo);
+      background: var(--bg-color); padding: 2px 8px; border-radius: 8px;
+      box-shadow: var(--neu-in);
+    }
+    .sw-text {
+      font-size: 12px; font-weight: 600; color: var(--text-heading);
+      line-height: 1.4;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .sw-status-badge {
+      margin-top: 6px; font-size: 10px; font-weight: 600; text-align: center;
+      padding: 3px 8px; border-radius: 8px;
+    }
+    .sw-status-badge.pending  { color: var(--text-muted); box-shadow: var(--neu-in); }
+    .sw-status-badge.running  { color: var(--accent-indigo); box-shadow: var(--neu-out-sm); }
+    .sw-status-badge.pass     { color: var(--accent-green); box-shadow: var(--neu-out-sm); }
+    .sw-status-badge.fail     { color: var(--accent-red); box-shadow: var(--neu-out-sm); }
+    .sw-status-badge.error    { color: var(--accent-orange); box-shadow: var(--neu-out-sm); }
+
+    /* 泳道内 mini 时间线 */
+    .sw-timeline {
+      flex: 1 1 auto;
+      position: relative;
+      padding: 0 8px 8px 24px;
+      display: flex; flex-direction: column; gap: 6px;
+      min-height: 30px;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: #b8bcc2 transparent;
+    }
+    .sw-timeline::-webkit-scrollbar { width: 4px; }
+    .sw-timeline::-webkit-scrollbar-thumb { background: #b8bcc2; border-radius: 10px; }
+
+    .sw-timeline::before {
+      content: ''; position: absolute; left: 10px; top: 0; bottom: 0; width: 3px;
+      border-radius: 10px; box-shadow: var(--neu-in);
+    }
+
+    .sw-node {
+      position: relative; z-index: 1;
+      animation: softRise 0.35s ease forwards;
+      font-size: 10px;
+    }
+    .sw-node-dot {
+      position: absolute; left: -20px; top: 2px; width: 14px; height: 14px;
+      border-radius: 50%; background: var(--bg-color);
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: var(--neu-out-sm);
+      font-size: 8px;
+    }
+    .sw-node-dot.think { color: var(--accent-purple); }
+    .sw-node-dot.tool  { color: var(--accent-orange); }
+    .sw-node-dot.debate { color: var(--accent-indigo); }
+    .sw-node-dot.result-err { color: var(--accent-red); box-shadow: var(--neu-in); }
+    .sw-node-dot.result-ok { color: var(--accent-green); box-shadow: var(--neu-in); }
+
+    .sw-node-body {
+      padding: 5px 7px; border-radius: 8px;
+      box-shadow: var(--neu-out-sm);
+      line-height: 1.4;
+    }
+    .sw-node-body.think { background: #f5f3ff; color: var(--accent-purple); }
+    .sw-node-body.tool  { background: #fff7ed; color: var(--text-heading); }
+    .sw-node-body.tool .sw-tool-name { font-weight: 700; color: var(--accent-orange); display: block; }
+    .sw-node-body.debate { background: #eef2ff; color: var(--text-heading); }
+    .sw-node-body.result-err { background: #fef2f2; color: var(--accent-red); font-weight: 600; }
+    .sw-node-body.result-ok { background: #ecfdf5; color: var(--accent-green); font-weight: 600; }
+
+    .sw-node-body .sw-result-detail {
+      font-weight: 400; font-size: 9px; margin-top: 2px; color: var(--text-muted);
+    }
+
+    /* ===== 全局摘要区（summary / done / chat） ===== */
+    #global-footer {
+      margin-top: 16px;
+      display: flex; flex-direction: column; gap: 12px;
+      flex-shrink: 0;
+    }
+    .summary-card {
+      padding: 16px; border-radius: 16px; box-shadow: var(--neu-out);
+      font-size: 12px; animation: softRise 0.5s ease forwards;
+    }
+    .summary-card .s-title {
+      font-size: 11px; font-weight: 700; color: var(--accent-indigo); text-transform: uppercase; margin-bottom: 8px;
+    }
+    .summary-card .s-conclusion {
+      color: var(--text-heading); font-weight: 600; font-size: 13px; margin-bottom: 8px;
+    }
+    .summary-card .s-stats {
+      display: flex; justify-content: space-between; padding: 10px; border-radius: 10px;
+      box-shadow: var(--neu-in); font-size: 11px; color: var(--text-muted);
+    }
+
+    .done-notice {
+      text-align: center; padding: 12px; font-size: 13px; font-weight: 600; color: var(--accent-green);
+      border-radius: 16px; box-shadow: var(--neu-out);
+      animation: softRise 0.5s ease forwards;
+    }
+
+    /* ===== 聊天气泡（在 global-footer 区） ===== */
+    .chat-bubble {
+      max-width: 90%; margin-bottom: 8px; animation: softRise 0.4s ease forwards;
+    }
+    .chat-bubble-right { margin-left: auto; text-align: right; }
+    .chat-bubble-left { margin-right: auto; text-align: left; }
+    .chat-sender {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      margin-bottom: 4px; letter-spacing: 0.5px;
+    }
+    .chat-sender.user { color: var(--accent-indigo); }
+    .chat-sender.agent { color: var(--text-muted); }
+    .chat-text {
+      display: inline-block; max-width: 100%; padding: 10px 16px;
+      font-size: 13px; line-height: 1.6; word-break: break-word;
+    }
+    .chat-bubble-right .chat-text {
+      background: var(--accent-indigo); color: #fff;
+      border-radius: 16px 4px 16px 16px;
+      box-shadow: 4px 4px 12px rgba(79,70,229,0.25);
+    }
+    .chat-bubble-left .chat-text {
+      background: #ffffff; color: var(--text-heading);
+      border-radius: 4px 16px 16px 16px;
+      box-shadow: var(--neu-out-sm);
+    }
+
+    /* ===== 追问操作按钮 ===== */
+    .sw-actions {
+      display: flex; gap: 6px; padding: 8px 12px; flex-shrink: 0;
+      border-top: 1px solid rgba(0,0,0,0.05);
+    }
+    .sw-action-btn {
+      flex: 1; padding: 5px 6px; border-radius: 6px; border: none; background: var(--bg-color);
+      color: var(--accent-indigo); font-size: 9px; font-weight: 600; cursor: pointer;
+      box-shadow: var(--neu-out-sm); transition: 0.2s;
+    }
+    .sw-action-btn:active { box-shadow: var(--neu-in); }
+
+    /* ===== 底部固定聊天输入框 ===== */
+    .chat-input-wrapper {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      padding: 14px 16px; background: rgba(224, 229, 236, 0.92);
+      backdrop-filter: blur(10px); z-index: 100;
+      display: flex; gap: 10px;
+    }
+    .chat-input {
+      flex: 1; border: none; outline: none; background: var(--bg-color);
+      border-radius: 20px; padding: 10px 14px; font-size: 13px; color: var(--text-heading);
+      box-shadow: var(--neu-in);
+    }
+    .chat-send-btn {
+      width: 40px; height: 40px; border-radius: 50%; border: none; background: var(--bg-color);
+      color: var(--accent-indigo); display: flex; align-items: center; justify-content: center;
+      cursor: pointer; box-shadow: var(--neu-out); transition: 0.2s; flex-shrink: 0;
+    }
+    .chat-send-btn:active { box-shadow: var(--neu-active); }
+
+    /* ===== 动画 ===== */
+    @keyframes softRise { 0% { opacity: 0; transform: translateY(12px); } 100% { opacity: 1; transform: translateY(0); } }
+    @keyframes blink-cursor { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+    .pulsing { animation: pulse 2s ease-in-out infinite; }
+    .streaming .chat-text::after {
+      content: '▊'; display: inline-block; animation: blink-cursor 0.8s infinite;
+      color: var(--accent-indigo); font-weight: bold; margin-left: 2px;
+    }
+    @keyframes pulse { 0%, 100% { box-shadow: 0 0 10px rgba(79, 70, 229, 0.4); } 50% { box-shadow: 0 0 20px rgba(79, 70, 229, 0.8); } }
+
+    .route-detail { font-size: 10px; margin-top: 3px; opacity: 0.8; }
+    .route-detail .rd-disabled { color: var(--accent-red); }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-title" id="main-title">Agent 会话 <span id="session-id-display" style="font-size:10px;color:var(--text-muted);font-weight:normal;"></span></div>
+    <div class="status-container">
+      <span id="status-text">Standby</span>
+      <div class="status-dot" id="main-dot"></div>
+    </div>
+  </div>
+
+  <!-- RAG 参考文档上传区（紧贴 header 下方，始终可见） -->
+  <div id="rag-section" style="margin-bottom: 12px;">
+    <div class="summary-card" style="padding: 10px 12px;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size:11px;font-weight:700;color:var(--accent-indigo);white-space:nowrap;">参考文档</span>
+        <span id="rag-doc-count" style="font-weight:400;font-size:10px;color:var(--text-muted);"></span>
+        <input type="file" id="rag-file-input" accept=".txt" style="display:none;">
+        <button id="rag-upload-btn" class="sw-action-btn" style="flex:1;font-size:10px;padding:5px 8px;margin-left:auto;">上传文件(txt格式)</button>
+      </div>
+      <div id="rag-doc-list" style="font-size:10px;color:var(--text-muted);max-height:120px;overflow-y:auto;margin-top:6px;"></div>
+      <div id="rag-upload-status" style="font-size:10px;margin-top:4px;display:none;"></div>
+    </div>
+  </div>
+
+  <!-- 全局日志区：scan / route / context / heartbeat 等非 claim 事件 -->
+  <div id="global-log"></div>
+
+  <!-- 泳道区 -->
+  <div id="swimlanes-outer">
+    <div id="swimlanes-wrap">
+      <div style="color:var(--text-muted); font-size:12px; padding:20px; white-space:nowrap;">等待 plan 事件以创建泳道...</div>
+    </div>
+  </div>
+
+  <!-- 全局底部区：summary / done / chat 消息 -->
+  <div id="global-footer"></div>
+
+  <!-- 底部追问栏 -->
+  <div class="chat-input-wrapper">
+    <input type="text" id="chat-input" class="chat-input" placeholder="输入追问内容，如：为什么这条是错的？" disabled>
+    <button id="chat-send-btn" class="chat-send-btn" disabled>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+    </button>
+  </div>
+
+  <script src="panel.js"></script>
+</body>
+</html>

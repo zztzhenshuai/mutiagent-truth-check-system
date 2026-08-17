@@ -1,0 +1,56 @@
+# default_dag.yaml — 默认事实核查管线
+# 此配置复现当前 Agent.run() 的完整行为（迭代四：方向1+方向5）
+#
+# 节点执行顺序：scan → plan → context → route → debate → summary
+# 条件边：
+#   - plan 后若 claims 为空 → 直接 summary_empty
+#   - context 节点通过 can_skip() 动态跳过（声明 < 3 条）
+
+name: default_factcheck
+version: 1
+description: 默认事实核查管线（与当前 Agent.run() 行为一致）
+
+nodes:
+  - name: scan
+    class: agent.workflow.nodes.ScanNode
+
+  - name: plan
+    class: agent.workflow.nodes.PlanNode
+
+  - name: context
+    class: agent.workflow.nodes.CrossReferenceNode
+
+  - name: route
+    class: agent.workflow.nodes.RouteNode
+
+  - name: debate
+    class: agent.workflow.nodes.DebateNode
+
+  - name: summary
+    class: agent.workflow.nodes.SummaryNode
+
+  - name: summary_empty
+    class: agent.workflow.nodes.EmptySummaryNode
+
+edges:
+  - from: scan
+    to: plan
+
+  - from: plan
+    to: context
+
+  - from: context
+    to: route
+
+  - from: route
+    to: debate
+
+  - from: debate
+    to: summary
+
+# 条件边：零声明时直接结束
+conditional_edges:
+  - from: plan
+    condition: "len(ctx.get('claims', [])) == 0"
+    to_if_true: summary_empty
+    to_if_false: context

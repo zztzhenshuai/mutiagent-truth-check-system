@@ -1,0 +1,422 @@
+# 迭代三：注意事项与代办清单
+
+## 1. 当前已完成的成员 A 工作
+
+- 已将 `Agent.run()` 从单 Agent 流程升级为：
+  - `Coordinator`
+  - `Verifier`
+  - `Challenger`
+  - `Judge`
+- 已新增事件模型：
+  - `debate`
+  - `summary`
+  - `chat`（当前只冻结结构，未接接口）
+- 已扩展 `done` 事件：
+  - `total_claims`
+  - `summary_available`
+  - `reverify_supported`
+  - `claim_results`
+- 已支持 claim 级重验证入口字段预留
+- 已通过 `agent/tests` 全量测试
+
+## 2. 需要注意的点
+
+### 环境与依赖
+
+- 后续联调和测试建议统一使用 `conda` 环境：`seIII`
+- `seIII` 环境中已补装：
+  - `json_repair`
+- 如果换解释器运行，容易再次遇到依赖缺失问题
+- `conda run -n seIII ...` 在当前机器上可能触发 Conda 的 GBK 编码报错，建议直接使用：
+
+```powershell
+D:\download\miniconda3\envs\seIII\python.exe -m pytest agent\tests
+```
+
+### 事件接口冻结
+
+- 成员 B、C 后续应以当前事件结构为准，不要再随意改字段名
+- `summary` 和扩展后的 `done` 已经具备前端展示和数据库持久化所需的主字段
+- `chat` 当前只是结构冻结，不代表聊天后端已经完成
+
+### 辩论链路的真实能力边界
+
+- 当前多 Agent 辩论框架已经可跑
+- 但辩论质量仍然受以下因素限制：
+  - 领域 skill 质量
+  - 工具白名单配置
+  - 新增工具是否到位
+  - 外部 API 是否可用
+- 如果成员 D 和成员 E 没有继续补齐领域路由与新工具，A 的辩论机制只能在现有工具能力上运行
+
+### 数据一致性
+
+- 当前代码已经保证：
+  - claim 即使中途异常，也会产出兜底结果
+  - `summary.total_claims` 能和整体计划条数对齐
+  - `done.claim_results` 可直接用于持久化
+- 成员 B 落库时，应尽量直接复用事件 JSON，避免再造一套字段语义
+
+### 前端联调重点
+
+- 前端不要只接 `annotation`
+- 这一轮真正应消费的是：
+  - `debate`
+  - `summary`
+  - `done`
+- `done.reverify_supported=true` 时，可以为 claim 卡片预留“重新验证”按钮
+
+## 3. 需要准备的 API / 外部能力
+
+### 必需
+
+- `ANTHROPIC_API_KEY`
+  - 用于主推理模型 Claude
+- `ANTHROPIC_BASE_URL`
+  - 当前 `ClaudeClient` 初始化时直接读取该变量，未配置会报错
+
+### 推荐
+
+- `GLM_API_KEY`
+  - 用于领域路由轻量模型
+  - 未配置时会回退为 Claude 路由
+- `TAVILY_API_KEY`
+  - 用于提升 `web_search` 的检索质量
+  - 未配置时会降级到 DuckDuckGo
+
+### 外部网络能力
+
+- 后端运行环境必须可以访问外网
+- 现有工具涉及：
+  - 搜索引擎请求
+  - 网页正文抓取
+  - Wikipedia 查询
+- 如果运行环境不能联网，辩论链路虽然能执行，但工具证据会严重退化
+
+## 4. 建议保留的环境命令
+
+### 运行测试
+
+```powershell
+D:\download\miniconda3\envs\seIII\python.exe -m pytest agent\tests
+```
+
+### 只跑 Agent 核心测试
+
+```powershell
+D:\download\miniconda3\envs\seIII\python.exe -m pytest agent\tests\test_agent.py
+```
+
+## 5. Agent 调用流程说明
+
+### 总体流程
+
+一篇文章进入系统后的主流程如下：
+
+1. 后端收到文章内容，调用 `Agent.run(article_text)`
+2. Claude 先扫描全文，提取值得核查的 claim
+3. 本地 `planner` 对 claim 打分并排序
+4. 本地准备 `cross_reference` 所需的文章上下文
+5. GLM 判断文章属于哪个 `skill/domain`
+6. 对每条 claim 开始 `Coordinator -> Verifier -> Challenger -> Judge` 辩论
+7. 本地代码汇总所有 claim 结果，生成 `summary`
+8. 输出扩展后的 `done`
+
+### `skill/domain` 是什么
+
+- `skill` 不是模型，而是一份领域配置
+- 它通常包含：
+  - 领域说明
+  - 专用 prompt
+  - 允许使用的工具白名单
+- 例如：
+  - `medical`
+  - `finance`
+  - `general`
+
+它的作用是：让不同领域文章走不同核查策略，而不是所有文章都用同一套 prompt 和工具。
+
+### GLM 的作用：判断文章属于哪个 skill/domain
+
+- 这一步不是判断文章真假
+- 这一步只是在正式核查前，判断“这篇文章应该走哪套领域核查策略”
+
+#### GLM 的输入
+
+- 候选 skill 列表
+- 每个 skill 的 `description`
+- 文章开头一段文本（不是整篇全文，代码里会截断）
+
+输入给模型的 prompt 语义大致是：
+
+```text
+你是一个文章领域分类器。
+请根据文章内容，从给定领域中选出最匹配的一个。
+若难以判断，请选 general。
+只返回 JSON：
+{"skill": "领域名", "confidence": 0.0~1.0}
+```
+
+#### GLM 的输出
+
+期望输出示例：
+
+```json
+{"skill": "medical", "confidence": 0.82}
+```
+
+#### GLM 的回退逻辑
+
+- 如果 GLM 不可用
+- 如果输出格式错误
+- 如果置信度过低
+- 如果返回了不存在的 skill
+
+则回退到 `general`，必要时也可回退为 Claude 路由。
+
+### Claim 扫描：先扫描全文，提取 claim
+
+这一步的作用是先从文章中找出“值得核查的候选声明”，避免后续逐句核查整篇文章。
+
+当前扫描标准主要偏向：
+
+- 包含数字或统计数据
+- 包含时间节点
+- 引用研究、报道、观点
+- 做出因果断言
+
+#### 这一步是否直接交给 Claude
+
+是。
+
+当前实现中，`scan_article(article, self._llm)` 默认使用 `complex_llm`，后端初始化时 `complex_llm` 默认是 `ClaudeClient()`。
+
+#### Claude 在 claim 扫描时的输入
+
+- 一段文章全文或分段文本
+- 一段“提取值得事实核查声明”的 prompt
+
+语义大致是：
+
+```text
+从以下文章中提取所有值得事实核查的声明。
+满足条件的包括数字、时间、引用、因果断言。
+不提取主观评价或泛泛表述。
+只返回 JSON：
+{"claims": ["原文片段1", "原文片段2"]}
+```
+
+#### Claude 在 claim 扫描时的输出
+
+期望输出示例：
+
+```json
+{"claims": ["中国2023年GDP增速为8.5%", "据报道此数据来自官方统计局"]}
+```
+
+#### 这一步的可信度如何理解
+
+- 它可以作为“候选 claim 生成器”
+- 但不应当被理解成“绝对可靠的 claim 定位器”
+
+它的优点：
+
+- 可以快速缩小后续核查范围
+- 对数字、时间、引用类声明较有效
+
+它的风险：
+
+- 可能漏掉值得核查的句子
+- 可能抽取边界不完整
+- 可能幻构 claim
+
+当前代码已经做了一层兜底：
+
+- 扫描出的 claim 必须能在原文中 `find()` 到
+- 找不到原文位置的 claim 会被直接丢弃
+
+### 辩论流：Coordinator -> Verifier -> Challenger -> Judge
+
+#### Coordinator
+
+- 不单独调用模型
+- 负责流程编排
+- 负责发起回合、决定是否二次重验证、收集最终结果
+- 位置在 /F:/大三下/软工三/vMe50T/agent/agent/agent.py:225
+
+#### Verifier
+
+- 负责对 claim 做主要事实核查
+- 使用 Claude
+- 会进入 `ReAct` 循环：
+  - 思考
+  - 选择工具
+  - 获得 Observation
+  - 再思考
+  - 直到输出 `Final Answer`
+- 位置在 /F:/大三下/软工三/vMe50T/agent/agent/agent.py:429
+
+#### Challenger
+
+- 负责质疑 Verifier 的结论是否证据充分
+- 使用 Claude
+- 不直接调用工具
+- 输入是：
+  - claim 文本
+  - Verifier 的结论
+  - Verifier 的推理
+  - Verifier 的工具调用结果
+
+输出示例：
+
+```json
+{
+  "stance": "support",
+  "confidence": 0.9,
+  "reasoning": "现有证据足以支撑初判。",
+  "missing_evidence": [],
+  "suggested_queries": []
+}
+```
+- 位置在 /F:/大三下/软工三/vMe50T/agent/agent/debate.py:66 和 /F:/大三下/软工三/vMe50T/agent/agent/agent.py:360
+
+#### Judge
+
+- 负责做最终裁决
+- 使用 Claude
+- 输入是：
+  - Verifier 初判
+  - Challenger 意见
+  - 如果发生重验证，则再加上 rebuttal 结果
+
+输出示例：
+
+```json
+{
+  "error_type": "factual_error",
+  "confidence": 0.86,
+  "reasoning": "综合核查后，该数字应判为事实错误。",
+  "evidence_urls": ["https://example.com/evidence"],
+  "debate_summary": "裁判采纳了初判，挑战方未提出足够反例。"
+}
+```
+- 位置在 /F:/大三下/软工三/vMe50T/agent/agent/debate.py:134 和 /F:/大三下/软工三/vMe50T/agent/agent/agent.py:375
+
+### 工具调用是怎么发生的
+
+当前并不是直接使用模型厂商原生 tool-use 协议完成整套核查。
+
+当前实现方式是：
+
+1. Claude 在 Verifier 阶段输出文本格式：
+
+```text
+Thought: 需要核查该数字是否属实
+Action: web_search
+Action Input: 中国 2023 GDP 增速
+```
+
+2. 本地代码解析出：
+   - `Action`
+   - `Action Input`
+3. 本地代码检查：
+   - 工具是否存在于 `TOOL_REGISTRY`
+   - 工具是否在当前 skill 白名单中
+4. 如果合法，则执行对应 Python 工具函数
+5. 将工具返回结果拼成 `Observation: ...`
+6. 再次送回 Claude，让它继续判断或直接输出 `Final Answer`
+
+### 当前模型分工
+
+#### Claude 负责
+
+- claim 扫描
+- Verifier 核查
+- Challenger 质疑
+- Judge 裁决
+
+#### GLM 负责
+
+- 领域路由
+- 即：判断文章该走哪个 skill/domain
+
+### 当前工具分工
+
+当前注册工具包括：
+
+- `web_search`
+- `wikipedia_lookup`
+- `source_verifier`
+- `cross_reference`
+
+它们分别用于：
+
+- `web_search`：查外部网页搜索结果
+- `wikipedia_lookup`：查背景实体信息
+- `source_verifier`：抓取某个 URL 正文
+- `cross_reference`：检查文章内部是否存在相互矛盾内容
+
+### 一句话理解
+
+- GLM 不负责判断真假，只负责决定“走哪套领域策略”
+- Claude 负责“抽 claim + 核查 + 辩论 + 裁决”
+- 工具由本地 Python 代码真正执行，模型只负责决定“要调用哪个工具”
+
+## 6. 你需要介入的代办列表
+
+### 你本人需要处理
+
+- 维护并确认 `seIII` 作为后续默认联调环境
+- 在项目运行环境中补齐并核对以下环境变量：
+  - `ANTHROPIC_API_KEY`
+  - `ANTHROPIC_BASE_URL`
+  - `GLM_API_KEY`（可选）
+  - `TAVILY_API_KEY`（可选）
+- 确认后端机器具备稳定外网访问能力
+
+### 需要协调成员 B
+
+- 按当前事件结构完成数据库字段和接口对齐
+- 优先支持以下落库对象：
+  - `event_record`
+  - `summary_record`
+  - `claim_record.final_result`
+  - `tool_call_record`
+- 为后续对话和历史恢复准备：
+  - `chat_message`
+  - `analysis_session`
+
+### 需要协调成员 C
+
+- 前端侧边栏接入：
+  - `debate`
+  - `summary`
+  - `done`
+- 为 `summary.representative_claims` 做总结卡片渲染
+- 为 `done.claim_results` 做详情展开与重验证入口
+
+### 需要协调成员 D
+
+- 提供稳定的领域标签与 skill schema
+- 提供可注入到 Agent 的领域 prompt / 辩论策略
+- 给成员 B 提供 skill 入库字段定义
+- 给成员 E 提供领域到工具的路由规则
+
+### 需要协调成员 E
+
+- 尽快补齐新增工具，优先级建议：
+  1. `official_statistics_lookup`
+  2. `wikidata_lookup`
+  3. `pubmed_search`
+- 确保工具输出适合被辩论 Agent 直接消费
+- 配合成员 B 做工具调用日志入库
+
+## 7. 后续补充记录
+
+### 已安装依赖补充
+
+- `json_repair`
+
+### 后续如新增 API / 工具 / 环境变量，请继续追加在这里
+
+- 待补充
